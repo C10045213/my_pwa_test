@@ -279,6 +279,7 @@ let lastX = 0;                 // 用于计算滑动角速度
 let lastTime = 0;
 let isSwipeDown = false;       // 是否确认为下滑退出手势
 let physicsAnimationId = null;
+let expandStartTime = 0;
 
 function initDrawPhase() {
     if (physicsAnimationId) {
@@ -289,8 +290,11 @@ function initDrawPhase() {
     const cardWidthPx = CARD_WIDTH_VW * pxPerVw;
     const CIRCUMFERENCE = TOTAL_CARDS * (cardWidthPx + 6); 
     RADIUS = CIRCUMFERENCE / (2 * Math.PI); 
-
     carouselArea.style.top = `calc(50vh + ${RADIUS}px)`;
+    
+    expandStartTime = Date.now();
+    deckData.sort(() => Math.random() - 0.5);
+    deckData.forEach(c => c.isReversed = Math.random() > 0.5);
     
     carouselArea.innerHTML = '';
     cardsDOM = [];
@@ -480,6 +484,13 @@ function carouselPhysicsLoop() {
 function selectCard(el, cardData) {
     if(el.parentElement !== carouselArea) return;
     cardData.drawTime = Date.now();
+    const timeDelta = drawTime - expandStartTime;
+    const chaosEntropy = Math.abs(Math.floor(timeDelta * 13 + globalAngle * 10000));
+    const availableCards = deckData.filter(c => !c.drawTime);
+    const trueCardIndex = chaosEntropy % availableCards.length;
+    const trueCardData = availableCards[trueCardIndex];
+    trueCardData.drawTime = drawTime;
+    trueCardData.isReversed = (timeDelta % 2) === 0;
     
     let idx = cardsDOM.indexOf(el);
     if(idx > -1) {
@@ -507,15 +518,27 @@ function selectCard(el, cardData) {
     
     let newSelectedEl = document.createElement('div');
     newSelectedEl.className = 'selected-card';
-    newSelectedEl.innerHTML = el.innerHTML; 
-    if(el.classList.contains('reversed')) newSelectedEl.classList.add('reversed');
-    
-    // 【核心修复 1】：将新卡牌加入到内部的 Grid 容器中，而不是直接加到 selectedArea
+    newSelectedEl.innerHTML = `
+        <div class="card-inner">
+            <div class="card-back card-back-design">
+                <svg viewBox="0 0 100 100" class="deck-star-svg" style="--charge-ratio: 1; filter: drop-shadow(0 0 15px rgba(140,200,255,0.6)); color: var(--theme-blue);">
+                    <g class="star-base-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
+                    <g class="star-glow-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
+                </svg>
+            </div>
+            <!-- 替换为重铸后的真实牌面 -->
+            <div class="card-front" style="background-image: url('${trueCardData.img}')"></div>
+        </div>`;
+    if(trueCardData.isReversed) {
+        newSelectedEl.classList.add('reversed');
+    } else {
+        newSelectedEl.classList.remove('reversed');
+    }    
+
     const gridEl = document.getElementById('selected-grid');
     gridEl.appendChild(newSelectedEl);
-    selectedCards.push({el: newSelectedEl, data: cardData, flipped: false});
+    selectedCards.push({el: newSelectedEl, data: trueCardData, flipped: false});
     
-    // 【核心修复 2】：智能响应式计算 (列数 & 缩放比例)
     const count = selectedCards.length;
     let columns = 4; // 默认最多 4 列
     let scale = 1.0; // 默认不缩放
@@ -637,6 +660,8 @@ async function executeResetSequence() {
             if (selectedArea) selectedArea.innerHTML = '';
             cardsDOM = [];
             selectedCards = [];
+
+            deckData.forEach(card => card.drawTime = null);
 
             // ==========================================
             // B. 状态机全局彻底归零与物理引擎斩杀
