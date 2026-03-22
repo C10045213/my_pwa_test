@@ -293,13 +293,13 @@ function initDrawPhase() {
     cardsDOM = [];
     selectedCards = []; 
     
-    selectedArea.innerHTML = ''; // 清空可能残留的卡牌
-    selectedArea.style.transform = 'translateY(0)'; // 重置位置到顶部
+    // selectedArea.innerHTML = ''; // 清空可能残留的卡牌
+    // selectedArea.style.transform = 'translateY(0)'; // 重置位置到顶部
     
-    // 创建一个专门用来排版的 Grid 容器
-    let gridEl = document.createElement('div');
-    gridEl.id = 'selected-grid';
-    selectedArea.appendChild(gridEl);
+    // // 创建一个专门用来排版的 Grid 容器
+    // let gridEl = document.createElement('div');
+    // gridEl.id = 'selected-grid';
+    // selectedArea.appendChild(gridEl);
     
     deckData.forEach((card, i) => {
         let cardEl = document.createElement('div');
@@ -476,6 +476,7 @@ function carouselPhysicsLoop() {
 // --- 执行抽牌：点击单卡 ---
 function selectCard(el, cardData) {
     if(el.parentElement !== carouselArea) return;
+    
     cardData.drawTime = Date.now();
     const timeDelta = drawTime - expandStartTime;
     const chaosEntropy = Math.abs(Math.floor(timeDelta * 13 + globalAngle * 10000));
@@ -487,30 +488,18 @@ function selectCard(el, cardData) {
     
     let idx = cardsDOM.indexOf(el);
     if(idx > -1) {
-        // ==========================================
-        // 【绝对物理魔法：缺口中心引力偏移算法】
-        // ==========================================
         const N = cardsDOM.length;
         const Sold = (Math.PI * 2) / N;       // 抽牌前的卡牌间距
         const Snew = (Math.PI * 2) / (N - 1); // 抽牌后的卡牌新间距
-        
-        // 我们计算出：为了让缺口左右两边的牌以同样的距离向中心靠拢，
-        // 整个圆环的排布基准线需要顺时针/逆时针转动多少度。
-        // 公式：旧缺口位置 - 新布局下缺口原本应该在的位置
         let deltaOffset = idx * Sold - (idx - 0.5) * Snew;
-        
-        // 将这个偏移量永久累加到布局基准中
         layoutAngleOffset += deltaOffset;
-        
-        // 剥离卡牌，进入自愈动画
         cardsDOM.splice(idx, 1); 
-        // ==========================================
     }
       
     carouselArea.removeChild(el);
-    
     let newSelectedEl = document.createElement('div');
     newSelectedEl.className = 'selected-card';
+    
     newSelectedEl.innerHTML = `
         <div class="card-inner">
             <div class="card-back card-back-design">
