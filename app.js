@@ -1,11 +1,14 @@
 // 模拟获取78张牌 (实际使用中请在 assets/cards/ 放入 0-77.jpg)
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
 const TOTAL_CARDS = 78;
-let deckData = Array.from({length: TOTAL_CARDS}, (_, i) => ({
-    id: i,
-    img: `assets/cards/${i}.jpg`,
-    isReversed: false,
-    drawTime: null
-}));
+let availableDeckData = [];
 
 // --- 音效系统 ---
 const sfx = {
@@ -272,7 +275,7 @@ let lastX = 0;                 // 用于计算滑动角速度
 let lastTime = 0;
 let isSwipeDown = false;       // 是否确认为下滑退出手势
 let physicsAnimationId = null;
-let expandStartTime = 0;
+let drawPhaseStartTime = 0;
 
 function initDrawPhase() {
     if (physicsAnimationId) {
@@ -287,61 +290,65 @@ function initDrawPhase() {
 
     carouselArea.style.top = `calc(50vh + ${RADIUS}px)`;
     
-    // 记录圆环诞生的绝对时间戳，作为真随机的起点
-    expandStartTime = Date.now();
-
-    // 初始视觉伪随机
-    deckData.sort(() => Math.random() - 0.5);
-    deckData.forEach(c => c.isReversed = Math.random() > 0.5);
+    // ==========================================
+    // 【核心修复 1：真正的洗牌与盲牌池准备】
+    // 每次进入抽牌阶段，重新将 0-77 号牌放入备选池，并进行一次物理洗牌
+    availableDeckData = Array.from({length: TOTAL_CARDS}, (_, i) => ({
+        id: i,
+        img: `assets/cards/${i}.jpg`,
+        isReversed: false // 正逆位暂不决定，抽的瞬间再定
+    }));
+    availableDeckData = shuffleArray(availableDeckData);
+    // ==========================================
 
     carouselArea.innerHTML = '';
     cardsDOM = [];
     selectedCards = []; 
     
-    // ==========================================
-    // 【致命 Bug 修复】：必须在此处创建并重置网格容器！
-    // 否则点击抽牌时会因为找不到 selected-grid 而报错崩溃
-    selectedArea.innerHTML = ''; 
-    selectedArea.style.transform = 'translateY(0)'; 
-    let gridEl = document.createElement('div');
-    gridEl.id = 'selected-grid';
-    selectedArea.appendChild(gridEl);
-    // ==========================================
-
-    deckData.forEach((card, i) => {
+    // 记录阶段开始的精确毫秒时间戳
+    drawPhaseStartTime = performance.now();
+    
+    // 生成 78 张【物理盲牌 DOM】
+    for(let i = 0; i < TOTAL_CARDS; i++) {
         let cardEl = document.createElement('div');
         cardEl.className = 'draw-card';
         cardEl.innerHTML = `
             <div class="card-inner">
                 <div class="card-back card-back-design">
                     <svg viewBox="0 0 100 100" class="deck-star-svg" style="--charge-ratio: 1; filter: drop-shadow(0 0 15px rgba(140,200,255,0.6)); color: var(--theme-blue);">
-                        <g class="star-base-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
-                        <g class="star-glow-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
+                        <g class="star-base-layer">
+                            <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/>
+                        </g>
+                        <g class="star-glow-layer">
+                            <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/>
+                        </g>
                     </svg>
                 </div>
-                <div class="card-front" style="background-image: url('${card.img}')"></div>
+                <!-- 此时的正面是空的，没有任何背景图片！ -->
+                <div class="card-front"></div>
             </div>`;
         
-        if(card.isReversed) cardEl.classList.add('reversed');
-        
+        cardEl.dataset.originalRank = i > 0 ? ((i % 2 !== 0) ? Math.ceil(i / 2) : -Math.ceil(i / 2)) : 0;
         cardEl.dataset.currentAngleOffset = 0; 
         
         cardEl.addEventListener('click', (e) => {
             if(expandProgress < 1 || isDragging || isSwipeDown) return; 
-            // 只有当圆环基本静止(或缓慢自转)时才允许抽牌
             if(Math.abs(angularVelocity) < 0.005) {
-                selectCard(cardEl, card);
+                // 不再传固定的 cardData，只传这个物理 DOM 给抽取函数
+                selectCard(cardEl);
             }
             e.stopPropagation(); 
         });
 
         carouselArea.appendChild(cardEl);
         cardsDOM.push(cardEl);
-    });
+    }
     
     globalAngle = 0;
     angularVelocity = 0;
-    layoutAngleOffset = 0;
+    layoutAngleOffset = 0; 
     expandProgress = 0;
     
     physicsAnimationId = requestAnimationFrame(carouselPhysicsLoop);
@@ -475,30 +482,40 @@ function carouselPhysicsLoop() {
     physicsAnimationId = requestAnimationFrame(carouselPhysicsLoop);
 }
 
-// --- 执行抽牌：点击单卡 ---
-function selectCard(el, cardData) {
+// --- 执行抽牌：点击单卡 (盲抽注入机制) ---
+// 注意：参数不再有 cardData
+function selectCard(el) {
     if(el.parentElement !== carouselArea) return;
     
     // ==========================================
-    // 【核心真随机算法】
+    // 【终极随机熵源：时间差薛定谔法则】
+    // 1. 获取点击瞬间与展开瞬间的高精度时间差 (如: 4235.1234 毫秒)
+    const drawTimeDelta = performance.now() - drawPhaseStartTime;
+    
+    // 2. 将这串微小且极度不可预测的毫秒数转化为一个整数偏移量
+    // 加上浏览器底层的强随机数，彻底打乱
+    const timeEntropy = Math.floor(drawTimeDelta * 1000) + Math.floor(Math.random() * 10000);
+    
+    // 3. 根据这个巨大的随机熵，从剩下的牌池里“切牌”选出一张
+    const poolSize = availableDeckData.length;
+    if (poolSize === 0) return; // 牌抽光了
+    
+    const selectedCardIndex = timeEntropy % poolSize;
+    
+    // 4. 将这张牌从池子里彻底拿出来
+    const finalCardData = availableDeckData.splice(selectedCardIndex, 1)[0];
+    
+    // 5. 再次利用时间熵决定正逆位！(偶数为正，奇数为逆)
+    finalCardData.isReversed = (timeEntropy % 2 !== 0);
+    finalCardData.drawTime = Date.now();
     // ==========================================
-    const drawTime = Date.now();
-    const timeDelta = drawTime - expandStartTime;
-    const chaosEntropy = Math.abs(Math.floor(timeDelta * 13 + globalAngle * 10000));
-    
-    const availableCards = deckData.filter(c => !c.drawTime);
-    const trueCardIndex = chaosEntropy % availableCards.length;
-    const trueCardData = availableCards[trueCardIndex];
-    
-    trueCardData.drawTime = drawTime;
-    trueCardData.isReversed = (timeDelta % 2) === 0;
 
-    // 物理自愈的数学补偿
     let idx = cardsDOM.indexOf(el);
     if(idx > -1) {
         const N = cardsDOM.length;
         const Sold = (Math.PI * 2) / N;       
         const Snew = (Math.PI * 2) / (N - 1); 
+        
         let deltaOffset = idx * Sold - (idx - 0.5) * Snew;
         layoutAngleOffset += deltaOffset;
         cardsDOM.splice(idx, 1); 
@@ -508,46 +525,37 @@ function selectCard(el, cardData) {
     
     let newSelectedEl = document.createElement('div');
     newSelectedEl.className = 'selected-card';
+    newSelectedEl.innerHTML = el.innerHTML; 
     
-    // 将卡牌底图替换为真随机命中后的牌面
-    newSelectedEl.innerHTML = `
-        <div class="card-inner">
-            <div class="card-back card-back-design">
-                <svg viewBox="0 0 100 100" class="deck-star-svg" style="--charge-ratio: 1; filter: drop-shadow(0 0 15px rgba(140,200,255,0.6)); color: var(--theme-blue);">
-                    <g class="star-base-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
-                    <g class="star-glow-layer"><circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/></g>
-                </svg>
-            </div>
-            <div class="card-front" style="background-image: url('${trueCardData.img}')"></div>
-        </div>`;
+    // 【核心注入】：直到卡牌飞上天、被你选中的这一刻，它的宿命才被写死！
+    const frontDiv = newSelectedEl.querySelector('.card-front');
+    frontDiv.style.backgroundImage = `url('${finalCardData.img}')`;
     
-    if(trueCardData.isReversed) {
+    if(finalCardData.isReversed) {
         newSelectedEl.classList.add('reversed');
-    } else {
-        newSelectedEl.classList.remove('reversed');
     }
     
-    // 放入网格并进行响应式排版
     const gridEl = document.getElementById('selected-grid');
-    if(gridEl) {
-        gridEl.appendChild(newSelectedEl);
-    }
-    
-    selectedCards.push({el: newSelectedEl, data: trueCardData, flipped: false});
+    gridEl.appendChild(newSelectedEl);
+    selectedCards.push({el: newSelectedEl, data: finalCardData, flipped: false});
     
     const count = selectedCards.length;
     let columns = 4; 
     let scale = 1.0; 
-    if (count <= 4) { columns = count; scale = 1.0; } 
-    else if (count <= 8) { columns = 4; scale = 0.85; } 
-    else { columns = 5; scale = 0.7; }
-    
-    if(gridEl) {
-        gridEl.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
-        gridEl.style.setProperty('--card-scale', scale);
+    if (count <= 4) {
+        columns = count; 
+        scale = 1.0;
+    } else if (count <= 8) {
+        columns = 4;     
+        scale = 0.85;    
+    } else {
+        columns = 5;     
+        scale = 0.7;     
     }
+    gridEl.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+    gridEl.style.setProperty('--card-scale', scale);
     
-    // 绑定翻转与大图事件
+    // 绑定翻开大图事件 (引用 finalCardData)
     newSelectedEl.addEventListener('click', (e) => {
         e.stopPropagation();
         let state = selectedCards.find(c => c.el === newSelectedEl);
@@ -555,14 +563,13 @@ function selectCard(el, cardData) {
             newSelectedEl.classList.add('flipped');
             state.flipped = true;
         } else {
-            modalImg.src = trueCardData.img;
-            if(trueCardData.isReversed) modalImg.style.transform = 'rotate(180deg)';
+            modalImg.src = finalCardData.img;
+            if(finalCardData.isReversed) modalImg.style.transform = 'rotate(180deg)';
             else modalImg.style.transform = 'none';
             modal.classList.remove('hidden');
         }
     });
 }
-
 // --- 停止抽牌：下滑长距离 ---
 function stopDrawing() {
     // 1. 隐藏巨大圆环 (轰然坠落)
@@ -649,8 +656,6 @@ async function executeResetSequence() {
             if (selectedArea) selectedArea.innerHTML = '';
             cardsDOM = [];
             selectedCards = [];
-
-            deckData.forEach(card => card.drawTime = null);
 
             // ==========================================
             // B. 状态机全局彻底归零与物理引擎斩杀
