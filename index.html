@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 强制竖屏，禁止用户缩放页面 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <title>星辰塔罗</title>
+    
+    <!-- PWA 核心配置 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#05050A"> <!-- 匹配你的宇宙深空背景色 -->
+    
+    <!-- iOS 专属全屏与图标优化 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="星辰塔罗">
+    <!-- 如果你有图标，取消下一行的注释并替换路径 -->
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 最底层：星空渲染引擎 (z-index: 1) -->
+    <canvas id="starfield"></canvas>
+    
+    <!-- 最顶层：全局 UI 容器 (z-index: 10) -->
+    <div id="app">
+        <!-- 阶段一：十字星/欢迎页 -->
+        <div id="cross-star-container" class="phase-active">
+            <div id="cross-star">
+                <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+                    <path class="star-outline" d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    <path class="star-fill" d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/>
+                    <path class="star-disperse" d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor" opacity="0"/>
+                </svg>
+            </div>
+        </div>
+
+        <!-- 阶段二：充能阶段 -->
+        <div id="shuffle-phase" class="phase-hidden">
+            <div id="deck" class="deck-emerge-start" style="--charge-ratio: 0;">
+                <div class="card card-back-design">
+                    <svg viewBox="0 0 100 100" class="deck-star-svg">
+                        <!-- 基础层 -->
+                        <g class="star-base-layer">
+                            <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/>
+                        </g>
+                        <!-- 发光层 -->
+                        <g class="star-glow-layer">
+                            <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M 50 15 Q 50 50 78 50 Q 50 50 50 85 Q 50 50 22 50 Q 50 50 50 15 Z" fill="currentColor"/>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- 阶段三：抽牌阶段 -->
+        <div id="draw-phase" class="phase-hidden">
+            <div id="selected-area"></div>
+            <div id="carousel-area"></div>
+        </div>
+
+        <!-- 全屏大图 Modal -->
+        <div id="modal" class="hidden">
+            <img id="modal-img" src="" alt="Card">
+        </div>
+    </div>
+    
+    <script src="canvas.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('PWA 离线引擎启动成功，作用域:', reg.scope))
+                    .catch(err => console.error('PWA 注册失败:', err));
+            });
+        }
+    </script>
+</body>
+</html>

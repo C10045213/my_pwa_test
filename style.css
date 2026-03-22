@@ -1,0 +1,337 @@
+:root {
+    --bg-color: #05050A;
+    --star-glow: rgba(0,170,240, 0.8); /* 浅蓝色光晕 */
+    --theme-blue: #00B0F0; /* 浅蓝色实体 */
+    --card-w: 18vw;
+    --card-h: calc(18vw * 1.7);
+}
+
+* { box-sizing: border-box; touch-action: none; user-select: none; }
+body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; background: var(--bg-color); color: white; overflow: hidden; font-family: sans-serif; }
+
+/* 基础图层与 UI 容器 */
+canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+#app { 
+    position: relative; 
+    z-index: 10; /* 全局 UI 必须高于 Canvas */
+    width: 100%; 
+    height: 100%; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    /* 核心：确保 #app 本身没有任何背景色，否则 backdrop-filter 无法穿透扭曲 Canvas */
+    background: transparent; 
+}
+
+/* 各个阶段独立容器的层级保障 */
+#cross-star-container, #shuffle-phase, #draw-phase {
+    z-index: 10; 
+}
+
+.phase-hidden { display: none !important; }
+.phase-active { display: flex; }
+
+/* --- 阶段一：十字星分层与发光 --- */
+#cross-star { 
+    width: 85px; 
+    height: 85px; 
+    color: white; 
+    cursor: pointer; 
+    /* 增加 opacity 的过渡，用于新星浮现 */
+    transition: filter 0.8s ease-out, transform 1s ease-in-out, opacity 1s ease-in-out; 
+    filter: drop-shadow(0 0 6px rgba(255,255,255,1)) drop-shadow(0 0 20px rgba(140,100,255,0.8)); 
+    opacity: 1;
+}
+
+#cross-star svg {
+    overflow: visible;
+}
+
+/* SVG 内部图层渐变基础属性 */
+.star-fill { transition: fill-opacity 0.8s ease-out; fill-opacity: 1; }
+.star-disperse { transform-origin: center; }
+
+/* 第一次触碰：镂空并散发光芒 */
+#cross-star.hollow-mode {
+    /* 移除强光晕，仅保留微弱的轮廓自发光 */
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.4)) drop-shadow(0 0 8px rgba(140,100,255,0.3));
+}
+#cross-star.hollow-mode .star-fill { 
+    fill-opacity: 0; /* 内部完全透明 */
+}
+#cross-star.hollow-mode .star-disperse {
+    /* 触发光芒向外溃散的动画 */
+    animation: lightDisperse 2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes lightDisperse {
+    0% { transform: scale(1); opacity: 0.8; filter: blur(2px); }
+    100% { transform: scale(5); opacity: 0; filter: blur(20px); }
+}
+
+/* --- 阶段二：充能阶段 --- */
+#shuffle-phase { 
+    position: absolute; 
+    width: 100%; 
+    height: 100%; 
+    /* 采用定位而非 flex，确保绝对的几何中心 */
+}
+
+#deck { 
+    position: absolute; 
+    top: 50%;
+    left: 50%;
+    /* 强制使用 translate(-50%, -50%) 居中 */
+    /* 并在后面附加 3D 变换用于浮现动画 */
+    /* 经典的塔罗牌竖向比例 1 : 1.7 */
+    width: 50vw; 
+    height: calc(50vw * 1.7); 
+    max-width: 300px; /* 防止在平板上过大 */
+    max-height: 510px;
+}
+
+/* 浮现动画的起点与终点，必须包含 translate(-50%, -50%) */
+#deck.deck-emerge-start {
+    transform: translate(-50%, -50%) scale(0.01) translateZ(-500px);
+    opacity: 0;
+}
+#deck.deck-emerge-end {
+    transform: translate(-50%, -50%) scale(1) translateZ(0);
+    opacity: 1;
+    transition: transform 2s cubic-bezier(0.1, 0.8, 0.3, 1), opacity 1.5s ease-out;
+}
+#deck.deck-shrink {
+    /* 卡牌原始宽度 50vw，目标抽牌宽度 20vw，比例为 20/50 = 0.4 */
+    /* 我们在缩小并上移的过程中，精确对齐到稍后圆环顶端卡牌的物理位置 */
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 1; /* 保持可见，作为母牌 */
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 全新透明牌背：让星空透过来 */
+.card-back-design {
+    width: 100%;
+    height: 100%;
+    background: transparent; 
+    border: 1px solid rgba(0,170,240, 0.25);
+    box-shadow: inset 0 0 20px rgba(0,170,240, 0.05);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 10px;
+}
+
+/* 注意：我们将阴影的起始值强行设为 0，防止和浏览器默认渲染产生断层 */
+.deck-star-svg {
+    width: 50%; 
+    height: 50%;
+    /* 统一使用主题冰蓝色 */
+    color: var(--theme-blue); 
+    /* 整个 SVG 不再应用动态的 filter */
+    overflow: visible !important; 
+}
+
+/* 基础层：永远保持 15% 的透明度，没有发光阴影，作为暗淡的骨架 */
+.star-base-layer {
+    opacity: 0.15;
+}
+
+/* 发光层：预设了满级的高亮发光滤镜，但初始完全透明 (opacity: 0) */
+.star-glow-layer {
+    /* 满级发光：内层白光 + 外层蓝光晕 */
+    filter: drop-shadow(0 0 15px rgba(0,170,240,0.9))
+            drop-shadow(0 0 5px rgba(255,255,255,1));
+            
+    /* 透明度直接由 JS 变量驱动：0 -> 1 */
+    opacity: var(--charge-ratio);
+    will-change: opacity, transform, filter; 
+    
+    /* 【核心修复】：将缩放原点设定为 SVG 的物理中心 */
+    /* 因为 viewBox="0 0 100 100"，几何中心恰好就是 50px 50px 或 center */
+    transform-origin: center;
+}
+
+/* --- 全新的充能爆发动画 (卡牌边缘光晕绽放) --- */
+.card-burst-anim {
+    /* 爆发时间为 1 秒，带有强烈的冲击感 */
+    animation: cardEdgeBurst 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes cardEdgeBurst {
+    0% {
+        /* 爆发瞬间：极亮的边框，向外扩散巨大的冰蓝光晕 */
+        border-color: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 0 40px 10px rgba(0,170,240, 0.6), 
+                    inset 0 0 30px rgba(0,170,240, 0.4);
+    }
+    100% {
+        /* 回归平静的满充能状态：仅保留微弱的能量边界 */
+        border-color: rgba(0,170,240, 0.25);
+        box-shadow: 0 0 0 0 rgba(0,170,240, 0), 
+                    inset 0 0 20px rgba(0,170,240, 0.05);
+    }
+}
+
+/* --- 十字星与圆环的过载闪烁动画 --- */
+.star-burst-anim {
+    animation: starOverload 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes starOverload {
+    0% {
+        /* 爆发瞬间：滤镜强度翻倍，中心白光极其刺眼，仿佛要融化 */
+        filter: drop-shadow(0 0 30px rgba(0,170,240,1))
+                drop-shadow(0 0 15px rgba(255,255,255,1))
+                brightness(2); /* 提升整体亮度 */
+        transform: scale(1.1); /* 伴随微小的膨胀感 */
+    }
+    100% {
+        /* 回归正常的发光层状态 */
+        filter: drop-shadow(0 0 15px rgba(0,170,240,0.9))
+                drop-shadow(0 0 5px rgba(255,255,255,1))
+                brightness(1);
+        transform: scale(1);
+    }
+}
+
+/* --- 阶段三：抽牌圆环与已选区 --- */
+#draw-phase { 
+    position: absolute; 
+    width: 100%; 
+    height: 100%; 
+    flex-direction: column; 
+    overflow: hidden; 
+    touch-action: none; 
+}
+
+/* --- 已选卡牌展示区：智能响应式网格 --- */
+#selected-area { 
+    position: absolute; 
+    /* 将中上方的区域框定，使其在 0% 到 50% 屏幕高度之间绝对居中 */
+    top: 5vh; 
+    left: 5vw;
+    width: 90vw; 
+    height: 45vh; 
+    
+    /* 使用 Flex 让内部的 Grid 容器永远在垂直和水平方向上绝对居中 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    z-index: 30; 
+    /* 下沉动画：只使用 transform，绝对不要动 top/left 防止重排闪烁！ */
+    transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(0); 
+}
+
+/* 内部动态网格容器 (由 JS 控制列数) */
+#selected-grid {
+    display: grid;
+    /* 默认 4 列，JS 会根据抽牌数量自动调整 */
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3vw; 
+    justify-items: center;
+    align-items: center;
+}
+
+/* 抽出的卡牌尺寸 (受 CSS 变量 --card-scale 智能控制) */
+.selected-card {
+    position: relative;
+    /* 基础宽度设定为 18vw，然后通过 scale 缩小 */
+    width: calc(18vw * var(--card-scale, 1)); 
+    height: calc(18vw * 1.7 * var(--card-scale, 1));
+    
+    /* 从圆环中抽出时的丝滑浮现 */
+    animation: cardEmerge 0.6s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    /* 让已选牌在动态缩放时也具备平滑过渡 */
+    transition: width 0.4s ease, height 0.4s ease;
+}
+
+@keyframes cardEmerge {
+    0% { transform: scale(0.5) translateY(50px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+#carousel-area { 
+    position: absolute; 
+    left: 50%; 
+    /* 将圆心定位在屏幕极深的正下方。
+       通过 JS 注入，使得 R = 248vw 时，圆环最顶端刚好在屏幕正中心 50vh 的位置 */
+    width: 0; 
+    height: 0; 
+}
+
+.draw-card {
+    position: absolute; 
+    /* 手机竖屏显示 4 张的完美宽度比例：20vw */
+    width: 20vw; 
+    height: calc(20vw * 1.7);
+    /* 绝对中心点对齐到圆心 */
+    left: -10vw; 
+    top: calc(20vw * 1.7 / -2);
+    transform-origin: center center; 
+    cursor: pointer;
+    /* 顶尖设备专属：开启硬件加速确保 78 个 3D DOM 丝滑旋转 */
+    will-change: transform; 
+}
+
+.card-inner { 
+    width: 100%; height: 100%; 
+    transform-style: preserve-3d; 
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); 
+    position: relative; 
+}
+
+.card-front, .card-back { 
+    position: absolute; width: 100%; height: 100%; 
+    backface-visibility: hidden; 
+    border-radius: 8px; /* 稍微圆润一点 */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.8); 
+}
+
+.card-front { 
+    transform: rotateY(180deg); 
+    background-color: #05050A; 
+    background-size: cover; 
+    background-position: center;
+}
+
+.flipped .card-inner { transform: rotateY(180deg); }
+.reversed .card-front { transform: rotateY(180deg) rotateZ(180deg); }
+
+/* --- 模态框 --- */
+#modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; justify-content: center; align-items: center; opacity: 1; transition: opacity 0.3s; }
+#modal.hidden { opacity: 0; pointer-events: none; }
+#modal-img { max-width: 90%; max-height: 90%; border-radius: 10px; }
+
+/* --- 终局：二指捏合的淡出动画 --- */
+/* 已选卡牌组的平滑暗淡消失 */
+#selected-area.fade-out-anim {
+    opacity: 0;
+    transition: opacity 0.6s ease-out;
+    pointer-events: none;
+}
+
+/* 模态框(大图)的消失动画 */
+#modal.fade-out {
+    opacity: 0;
+    transition: opacity 0.6s ease-out;
+    pointer-events: none;
+}
+
+/* --- 重置：十字星重新凝结动画 --- */
+#cross-star.re-emerge-anim {
+    /* 从极度放大的蓝移光晕状态向内坍缩成实心星 */
+    transform: scale(15);
+    opacity: 0;
+    filter: drop-shadow(0 0 0 transparent);
+    
+    animation: starReEmerge 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes starReEmerge {
+    0% { transform: scale(15); opacity: 0; filter: drop-shadow(0 0 50px rgba(0,170,240,1)); }
+    60% { opacity: 1; filter: drop-shadow(0 0 20px rgba(0,170,240,0.8)); }
+    100% { transform: scale(1); opacity: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,1)) drop-shadow(0 0 20px rgba(140,100,255,0.8)); }
+}
