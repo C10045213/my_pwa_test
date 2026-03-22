@@ -264,10 +264,7 @@ elDeck.addEventListener('click', () => {
 let cardsDOM = [];
 
 const CARD_WIDTH_VW = 20;
-const pxPerVw = window.innerWidth / 100;
-const cardWidthPx = CARD_WIDTH_VW * pxPerVw;
-const CIRCUMFERENCE = TOTAL_CARDS * (cardWidthPx + 6); 
-const RADIUS = CIRCUMFERENCE / (2 * Math.PI); 
+let RADIUS = 0; 
 
 let globalAngle = 0;           
 let angularVelocity = 0;       
@@ -288,6 +285,11 @@ function initDrawPhase() {
         cancelAnimationFrame(physicsAnimationId);
         physicsAnimationId = null;
     }
+    const pxPerVw = window.innerWidth / 100;
+    const cardWidthPx = CARD_WIDTH_VW * pxPerVw;
+    const CIRCUMFERENCE = TOTAL_CARDS * (cardWidthPx + 6); 
+    RADIUS = CIRCUMFERENCE / (2 * Math.PI); 
+
     carouselArea.style.top = `calc(50vh + ${RADIUS}px)`;
     
     carouselArea.innerHTML = '';
