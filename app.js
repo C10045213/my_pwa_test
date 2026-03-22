@@ -1,10 +1,3 @@
-// --- 工具与种子随机数 ---
-let seed = Date.now();
-function seededRandom() {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-}
-
 // 模拟获取78张牌 (实际使用中请在 assets/cards/ 放入 0-77.jpg)
 const TOTAL_CARDS = 78;
 let deckData = Array.from({length: TOTAL_CARDS}, (_, i) => ({
